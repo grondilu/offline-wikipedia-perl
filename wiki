@@ -1,0 +1,146 @@
+#!/usr/bin/perl -w
+use strict;
+use warnings;
+use DB_File;
+use CGI qw(:standard);
+
+use utf8;
+use Encode qw(encode decode);
+
+use constant HTML_HOME => p a { -href => $ENV{SCRIPT_NAME} }, 'back home';
+
+sub pretreatment;
+sub posttreatment;
+sub get_article;
+sub comment { return "<!-- ", join(', ', @_), " -->\n" }
+
+BEGIN { print header(-charset=>'utf-8'), start_html('offline wiki') }
+END { print "\n" x 4, HTML_HOME, end_html }
+
+my $project  = param('project') || 'frwiki';
+if ( param 'search' ) {
+    my $search  = param('search');
+    my $grep = 
+    -f "$project.titles" ? [ 'grep', '' ] :
+    -f "$project.titles.gz" ? [ qw(zgrep .gz) ] :
+    -f "$project.titles.xz" ? [ qw(xzgrep  .xz) ] :
+    die p "No title file in CGI directory for project $project";
+    open my $result, '-|', $grep->[0], '-i', $search, $project.".titles" . $grep->[1];
+    my @result = <$result>;
+    print  p [
+	@result ?
+	scalar(@result). " result(s) for \"$search\":" .
+	ul( map li(a({ -href=>"?project=$project&title=$_" }, $_)), @result )
+	:
+	"No result for '$search' on $project."
+    ];
+}
+elsif ( my $title = ucfirst param 'title' ) {
+    use DB_File;
+    use Digest::MD5 qw(md5);
+    my $_ = length($title) > 16 ? md5 $title : $title;
+    eval {
+	tie my %index, 'DB_File', "$project.index", O_RDONLY
+	    or die "could not open wiki index ($project.index)";
+	if (exists $index{$_}) {
+	    use Storable qw(thaw);
+	    my $article = get_article unpack 'LC', $index{$_};
+	    my $prefix = "?project=$project&title=";
+	    use Text::MediawikiFormat qw(wikiformat);
+	    print
+	    h1($title),
+	    encode('UTF-8', posttreatment wikiformat pretreatment($article), {}, {prefix=>$prefix} ),
+	    hr, "\n",
+	    start_form(-action=>"?project=$project&title=$title"),
+	    hidden(-name=>'title', -value=>$title),
+	    hidden(-name=>'project', -value=>$project),
+	    textarea(
+		-name=> 'modif',
+		-value=> encode('utf8', $article),
+		-rows=>10,
+		-cols=>80,
+	    ), br,
+	    submit,
+	    end_form
+	    ;
+	}
+	else { print p [ "No article with this exact title in $project.",
+		"You may try <a href=\"?project=$project&title=".
+		encode('UTF-8', ucfirst decode 'UTF-8', $title)
+		."\">this link</a>." ];
+	}
+    };
+    print p $@ if $@;
+}
+else {
+    print
+    start_form,
+    radio_group(
+	-name=>'project',
+	-values=>[ map s/\.zdb$//r, glob '*.zdb' ],
+	-default=>'frwiki'
+    ),
+    br, 'search:', textfield('search'),
+    br, submit,
+    end_form
+    ;
+}
+
+sub pretreatment {
+    shift 
+    =~ s/\{\{(
+    voir(?:\s(?:homonym(?:es|ie)|aussi))?               |
+    (?:ébauche|détail|loupe)                                  |
+    article\s(?:détaillé|principal|connexe)   
+    )\|\s*([^{}]*)\}\}/($1: '''[[$2]]''')/gixr
+    =~ s,\{\{(Japonais|Hébreu|Chinois|nihongo)\|([^|]*)\|([^}]*)\}\},$2<sup><small>([[$1|$3]])</small></sup>,gr
+    =~ s/\{\{formatnum:(\d+)\}\}/$1/gir
+    =~ s,\{\{e\}\},<sup>e</sup>,gir
+    =~ s/\{\{infobox [^{}]*\}\}//gir
+    =~ s/\{\{confusion\|texte=([^{}]*)\}\}/$1\n/gir
+#    =~ s/\\left\[/〔/gr =~ s/\\right\]/〕/gr
+#    =~ s/\\Rightarrow\b/ ==> /gr   
+#    =~ s/\\ge\b/≥/gr =~ s/\\le\b/≤/gr
+#    =~ s/\\varepsilon\b/ϵ/gr
+#    =~ s/\\alpha\b/α/gr =~ s/\\beta\b/β/gr =~ s/\\delta\b/δ/gr =~ s/\\epsilon\b/ε/gr
+#    =~ s/\\big([\(\)])/$1/gr
+#    =~ s/\\sum_/∑_/gr
+#    =~ s/\\in\b/∈/gr
+#    =~ s/\\quad\b/  /gr =~ s/\\forall/∀/gr =~ s/\\exists\b/∃/gr =~ s/\\infty/∞/gr
+}
+
+sub posttreatment {
+    my $_ = shift;
+
+#    s/&lt;ref( .+?)?&gt;/≪/g;
+#    s,&lt;/ref&gt;,≫,g;
+#    my (@references, $i);
+#    s/(≪(?:[^≪≫]++|(?1))*≫)/{$i++; push @references, "<a name=$i\/>$1"; "<sup><a href=#$i>$i<\/a><\/sup>"}/mge;
+#    s/(?:(?:&lt;|<)references *\/(?:&gt;|>)|\{\{références(?:|.*?)?\}\})/{ol li [ @references ]}/ie;
+#    s/[≪≫]//g;
+
+    return $_;
+
+    #=~ s,\{\{voir Wiktionnaire\|([^{}]*)\}\},Wiktionnaire: <a href="http:://localhost/cgi-bin/wiki?project=frwikt&title=$1">$1</a>,gir
+    #=~ s,&lt;ref(?: (?:group|name)=.*)?&gt;([^&]*)&lt;/ref&gt;,<!-- $1 -->,gr
+#   # chess diagrams
+#   =~ s/(?<=\|)[\sx]+(?=\|)/ /gr
+#   =~ s/(?<=\|)pd(?=\|)/♙/gr =~ s/(?<=\|)pl(?=\|)/♟/gr
+#   =~ s/(?<=\|)rd(?=\|)/♖/gr =~ s/(?<=\|)rl(?=\|)/♜/gr
+#   =~ s/(?<=\|)nd(?=\|)/♘/gr =~ s/(?<=\|)nl(?=\|)/♞/gr
+#   =~ s/(?<=\|)bd(?=\|)/♗/gr =~ s/(?<=\|)bl(?=\|)/♝/gr
+#   =~ s/(?<=\|)qd(?=\|)/♕/gr =~ s/(?<=\|)ql(?=\|)/♛/gr
+#   =~ s/(?<=\|)kd(?=\|)/♔/gr =~ s/(?<=\|)kl(?=\|)/♚/gr
+}
+  
+sub get_article {
+    use IO::Uncompress::Bunzip2 qw(bunzip2 $Bunzip2Error);
+    open my $db, "< $project.db";
+    my ($seek, $idx) = @_;
+    seek $db, $seek, 0;
+    read $db, my $length, 4;
+    read $db, my $z, unpack 'L', $length;
+    bunzip2 \($z, my $block);
+    die $Bunzip2Error if $Bunzip2Error;
+    return (thaw $block)->[$idx];
+}

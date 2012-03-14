@@ -1,0 +1,64 @@
+#!/usr/bin/perl -w
+use v5.14;
+use strict;
+use warnings;
+die "please provide a database name" unless $ARGV[0];
+my $rootname = $ARGV[0] =~ s/\.xml\.bz2\E//r =~ s,.*/,,r;
+
+use Encode;
+use XML::Parser;
+use IO::Uncompress::Bunzip2;
+use IO::Compress::Bzip2 qw(bzip2 $Bzip2Error);
+
+open my $db, "> $rootname.db"
+    or die "coud not open $rootname.db";
+END { close $db }
+
+open my $t, "> $rootname.titles"
+    or die "coud not open $rootname.titles";
+END { close $t }
+
+my ($title, @block, $char);
+
+use DB_File;
+tie my %index, 'DB_File', "$rootname.index";
+END { untie %index }
+
+$SIG{INT} = sub { die "caught INT signal" };
+END { printf "%d entries made\n", scalar keys %index }
+
+sub store {
+    use Storable qw(freeze);
+    my $freeze = freeze shift;
+    bzip2 \($freeze, my $z);
+    my $start = tell $db;
+    print $db pack('L', length $z), $z;
+    printf "block %d -> %d, compressed ratio is %2.2f%%\n",
+    $start, tell($db), 100*length($z)/length($freeze),
+    ;
+}
+
+my $parser = new XML::Parser Handlers => {
+    Char => sub { shift; $char .= shift },
+    Start => sub { undef $char },
+    End => sub {
+	shift;
+	given( $_[0] ) {
+	    when( 'title' ) { say $t $title = encode 'utf8', $char }
+	    when( 'text' )  {
+		use Digest::MD5 qw(md5);
+		push @block, $char;
+		$index{length($title) > 16 ? md5 $title : $title} =
+		    pack 'LC', tell($db), @block - 1;
+		if (@block == 256) {
+		    store \@block;
+		    undef @block;
+		}
+		elsif (@block > 256) { die "block size above 256" }
+	    }
+	}
+    },
+};
+
+$parser->parse( new IO::Uncompress::Bunzip2 $ARGV[0] );
+END { store \@block if @block }
