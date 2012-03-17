@@ -1,6 +1,7 @@
 This project aims at allowing people to browse Wikipedia offline.
 
 HOWTO:
+
 - download a database dump at http://download.wikimedia.org (you want the "pages-articles" one)
 - run "$ perl berkeleyify [lang]wikipedia-page-articles-YYYYMMDD.xml.bz2" into your CGI directory
 
@@ -16,3 +17,8 @@ The script berkeleyify will create three files:
   This berkeley database associates each article title to the position in the .db file.
 - [lang]wikipedia-pages-articles-YYYYMMDD.titles:
   This is a plain text list of titles.  It is used with grep to search for titles.
+
+LICENSE:
+
+License information is repeated in each individual files.
+
