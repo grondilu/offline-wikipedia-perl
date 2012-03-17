@@ -4,7 +4,6 @@
 # 
 # This program is free software; you can redistribute it and/or modify it under
 # the same terms as Perl itself (L<perlgpl>, L<perlartistic>).
-
 use strict;
 use warnings;
 use DB_File;
@@ -20,9 +19,8 @@ use constant HTML_HOME => p a { -href => $ENV{SCRIPT_NAME} }, 'back home';
 sub pretreatment;
 sub posttreatment;
 sub get_article;
-sub comment { return "<!-- ", join(', ', @_), " -->\n" }
 
-BEGIN { print header(-charset=>'utf-8'), start_html('offline wiki') }
+BEGIN { print header(-charset=>'utf-8'), start_html('Offline Wikipedia') }
 END { print "\n" x 4, HTML_HOME, end_html }
 
 my $project  = param('project') || 'frwiki';
@@ -39,19 +37,18 @@ if ( param 'search' ) {
 	@result ?
 	scalar(@result). " result(s) for \"$search\":" .
 	ul( map li(a({ -href=>"?project=$project&title=$_" }, $_)), @result )
-	:
-	"No result for '$search' on $project."
+	: "No result for '$search' on $project."
     ];
 }
 elsif ( my $title = ucfirst param 'title' ) {
     use DB_File;
     use Digest::MD5 qw(md5);
     eval {
-	if (my $article = get_article $title) {
+	if (my ($article, $redirection) = get_article $title) {
 	    my $prefix = "?project=$project&title=";
 	    use Text::MediawikiFormat qw(wikiformat);
 	    print
-	    h1($title),
+	    h1($redirection // $title),
 	    encode('UTF-8', posttreatment wikiformat pretreatment($article), {}, {prefix=>$prefix} ),
 	    hr, "\n",
 	    start_form(-action=>"?project=$project&title=$title"),
@@ -66,11 +63,6 @@ elsif ( my $title = ucfirst param 'title' ) {
 	    submit,
 	    end_form
 	    ;
-	}
-	else { print p [ "No article with this exact title in $project.",
-		"You may try <a href=\"?project=$project&title=".
-		encode('UTF-8', ucfirst decode 'UTF-8', $title)
-		."\">this link</a>." ];
 	}
     };
     print p $@ if $@;
@@ -140,15 +132,24 @@ sub get_article {
     my $title = shift;
     tie my %index, 'DB_File', "$project.index", O_RDONLY
 	or die "could not open wiki index ($project.index)";
-    my ($seek, $idx) = unpack 'LC', $index{length($title) > 16 ? md5 $title : $title};
+    my $location;
+    for ( map { $_, ucfirst($_), encode 'utf8', ucfirst decode 'utf8', $_ } $title, encode 'utf8', $title ) {
+	my $index = length($_) > 16 ? md5 $_ : $_;
+	next unless exists $index{$index};
+	($title, $location) = ($_, $index{$index});
+	last;
+    }
+    die "could not find article '$title'" unless $location;
+    my ($seek, $idx) = unpack 'LC', $location;
     open my $db, "< $project.db";
     seek $db, $seek, 0;
     read $db, my $length, 4;
     read $db, my $z, unpack 'L', $length;
+    close $db;
     bunzip2 \($z, my $block);
     die $Bunzip2Error if $Bunzip2Error;
     my $article = (thaw $block)->[$idx];
-    if ($article =~ /^#REDIRECTION \[\[([^\]]*)\]\]$/i) {
-	return "<!-- redirected from $title-->\n" . get_article($1);
+    if ($article =~ /^#REDIRECT(?:ION)?\s*\[\[(?<redir>[^\]]*)\]\]$/i) {
+	return get_article($+{redir}), encode 'utf8', $+{redir};
     } else { return $article }
 }
