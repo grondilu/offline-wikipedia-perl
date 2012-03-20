@@ -40,7 +40,7 @@ if ( param 'search' ) {
 	: "No result for '$search' on $project."
     ];
 }
-elsif ( my $title = ucfirst param 'title' ) {
+elsif ( my $title = param 'title' ) {
     use DB_File;
     use Digest::MD5 qw(md5);
     eval {
@@ -49,7 +49,7 @@ elsif ( my $title = ucfirst param 'title' ) {
 	    use Text::MediawikiFormat qw(wikiformat);
 	    print
 	    h1($redirection // $title),
-	    encode('UTF-8', posttreatment wikiformat pretreatment($article), {}, {prefix=>$prefix} ),
+	    encode('utf8', posttreatment wikiformat pretreatment($article), {}, {prefix=>$prefix} ),
 	    hr, "\n",
 	    start_form(-action=>"?project=$project&title=$title"),
 	    hidden(-name=>'title', -value=>$title),
@@ -130,6 +130,7 @@ sub posttreatment {
   
 sub get_article {
     my $title = shift;
+    $title = ucfirst $title if $project =~ /wiki$/;
     tie my %index, 'DB_File', "$project.index", O_RDONLY
 	or die "could not open wiki index ($project.index)";
     my $location;
@@ -150,6 +151,8 @@ sub get_article {
     die $Bunzip2Error if $Bunzip2Error;
     my $article = (thaw $block)->[$idx];
     if ($article =~ /^#REDIRECT(?:ION)?\s*\[\[(?<redir>[^\]]*)\]\]$/i) {
-	return get_article($+{redir}), encode 'utf8', $+{redir};
+	my $redir = $+{redir};
+	return "<!-- redirected from '@{[decode 'utf8', $title]}' -->\n" .
+	get_article($redir), $redir;
     } else { return $article }
 }
