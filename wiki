@@ -47,16 +47,16 @@ elsif ( my $title = param 'title' ) {
 	if (my ($article, $redirection) = get_article $title) {
 	    my $prefix = "?project=$project&title=";
 	    use Text::MediawikiFormat qw(wikiformat);
-	    print
-	    h1($redirection // $title),
-	    encode('utf8', posttreatment wikiformat pretreatment($article), {}, {prefix=>$prefix} ),
-	    hr, "\n",
+	    print h1($redirection // $title),
+	    encode 'utf8', join "\n",
+	    posttreatment(wikiformat pretreatment($article), {}, {prefix=>$prefix} ),
+	    hr,
 	    start_form(-action=>"?project=$project&title=$title"),
 	    hidden(-name=>'title', -value=>$title),
 	    hidden(-name=>'project', -value=>$project),
 	    textarea(
 		-name=> 'modif',
-		-value=> encode('utf8', $article),
+		-value=> $article,
 		-rows=>10,
 		-cols=>80,
 	    ), br,
@@ -86,7 +86,7 @@ sub pretreatment {
     =~ s/\{\{(
     voir(?:\s(?:homonym(?:es|ie)|aussi))?               |
     (?:ébauche|détail|loupe)                                  |
-    article\s(?:détaillé|principal|connexe)   
+    article[\s_](?:détaillé|principal|connexe)   
     )\|\s*([^{}]*)\}\}/($1: '''[[$2]]''')/gixr
     =~ s,\{\{(Japonais|Hébreu|Chinois|nihongo)\|([^|]*)\|([^}]*)\}\},$2<sup><small>([[$1|$3]])</small></sup>,gr
     =~ s/\{\{formatnum:(\d+)\}\}/$1/gir
@@ -153,6 +153,6 @@ sub get_article {
     if ($article =~ /^#REDIRECT(?:ION)?\s*\[\[(?<redir>[^\]]*)\]\]$/i) {
 	my $redir = $+{redir};
 	return "<!-- redirected from '@{[decode 'utf8', $title]}' -->\n" .
-	get_article($redir), $redir;
+	get_article($redir), encode 'utf8', $redir;
     } else { return $article }
 }
