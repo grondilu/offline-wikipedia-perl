@@ -107,25 +107,39 @@ sub pretreatment {
 sub posttreatment {
     my $_ = shift;
 
-#    s/&lt;ref( .+?)?&gt;/≪/g;
-#    s,&lt;/ref&gt;,≫,g;
-#    my (@references, $i);
-#    s/(≪(?:[^≪≫]++|(?1))*≫)/{$i++; push @references, "<a name=$i\/>$1"; "<sup><a href=#$i>$i<\/a><\/sup>"}/mge;
-#    s/(?:(?:&lt;|<)references *\/(?:&gt;|>)|\{\{références(?:|.*?)?\}\})/{ol li [ @references ]}/ie;
-#    s/[≪≫]//g;
+    my $references_mark = qr/(?:(?:&lt|<);references\s*\/(?:&gt;|>)|{{Références}})/;
+    # Dealing with references
+    if ( /$references_mark/s ) {
+	my (@ref, %name);
+	s/&lt;ref(?:\s+name=(?<name>[^\/]*?)\s*)?(?<!\/)&gt;(?<text>.*?)&lt;\/ref&gt;
+	/
+	push @ref, $+{text};
+	$name{$+{name}} = @ref + 1 if $+{name};
+	sprintf "<sup><a href=#ref%d>%d<\/a><\/sup>", (scalar(@ref),) x 2;
+	/gsex;
+
+	s/&lt;ref\s+name=([^\/]*?)\s*\/&gt;/
+	sprintf "<sup><a href=#ref%d>%d<!-- DEBUG: |%s| --><\/a><\/sup>", ($name{$1},) x 2, $1
+	/gsex;
+
+	my $i;
+	s/$references_mark
+	/ol li [ map { "<a name=ref". ++$i . ">$_<\/a>" } @ref ]
+	/sex;
+    }
 
     return $_;
 
-    #=~ s,\{\{voir Wiktionnaire\|([^{}]*)\}\},Wiktionnaire: <a href="http:://localhost/cgi-bin/wiki?project=frwikt&title=$1">$1</a>,gir
-    #=~ s,&lt;ref(?: (?:group|name)=.*)?&gt;([^&]*)&lt;/ref&gt;,<!-- $1 -->,gr
+    #s,\{\{voir Wiktionnaire\|([^{}]*)\}\},Wiktionnaire: <a href="http:://localhost/cgi-bin/wiki?project=frwikt&title=$1">$1</a>,gi
+    #s,&lt;ref(?: (?:group|name)=.*)?&gt;([^&]*)&lt;/ref&gt;,<!-- $1 -->,g
 #   # chess diagrams
-#   =~ s/(?<=\|)[\sx]+(?=\|)/ /gr
-#   =~ s/(?<=\|)pd(?=\|)/♙/gr =~ s/(?<=\|)pl(?=\|)/♟/gr
-#   =~ s/(?<=\|)rd(?=\|)/♖/gr =~ s/(?<=\|)rl(?=\|)/♜/gr
-#   =~ s/(?<=\|)nd(?=\|)/♘/gr =~ s/(?<=\|)nl(?=\|)/♞/gr
-#   =~ s/(?<=\|)bd(?=\|)/♗/gr =~ s/(?<=\|)bl(?=\|)/♝/gr
-#   =~ s/(?<=\|)qd(?=\|)/♕/gr =~ s/(?<=\|)ql(?=\|)/♛/gr
-#   =~ s/(?<=\|)kd(?=\|)/♔/gr =~ s/(?<=\|)kl(?=\|)/♚/gr
+#   s/(?<=\|)[\sx]+(?=\|)/ /g
+#   s/(?<=\|)pd(?=\|)/♙/gr =~ s/(?<=\|)pl(?=\|)/♟/g
+#   s/(?<=\|)rd(?=\|)/♖/gr =~ s/(?<=\|)rl(?=\|)/♜/g
+#   s/(?<=\|)nd(?=\|)/♘/gr =~ s/(?<=\|)nl(?=\|)/♞/g
+#   s/(?<=\|)bd(?=\|)/♗/gr =~ s/(?<=\|)bl(?=\|)/♝/g
+#   s/(?<=\|)qd(?=\|)/♕/gr =~ s/(?<=\|)ql(?=\|)/♛/g
+#   s/(?<=\|)kd(?=\|)/♔/gr =~ s/(?<=\|)kl(?=\|)/♚/g
 }
   
 sub get_article {
