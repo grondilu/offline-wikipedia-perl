@@ -107,7 +107,7 @@ sub pretreatment {
 sub posttreatment {
     my $_ = shift;
 
-    my $references_mark = qr/(?:(?:&lt|<);references\s*\/(?:&gt;|>)|{{Références}})/;
+    my $references_mark = qr/(?:(?:&lt|<);references\s*\/(?:&gt;|>)|{{[Rr]éférences}})/;
     # Dealing with references
     if ( /$references_mark/s ) {
 	my (@ref, %name);
@@ -140,6 +140,7 @@ sub posttreatment {
 #   s/(?<=\|)bd(?=\|)/♗/gr =~ s/(?<=\|)bl(?=\|)/♝/g
 #   s/(?<=\|)qd(?=\|)/♕/gr =~ s/(?<=\|)ql(?=\|)/♛/g
 #   s/(?<=\|)kd(?=\|)/♔/gr =~ s/(?<=\|)kl(?=\|)/♚/g
+
 }
   
 sub get_article {
@@ -148,11 +149,14 @@ sub get_article {
     tie my %index, 'DB_File', "$project.index", O_RDONLY
 	or die "could not open wiki index ($project.index)";
     my $location;
-    for ( map { $_, ucfirst($_), encode 'utf8', ucfirst decode 'utf8', $_ } $title, encode 'utf8', $title ) {
-	my $index = length($_) > 16 ? md5 $_ : $_;
-	next unless exists $index{$index};
-	($title, $location) = ($_, $index{$index});
-	last;
+    if ($title =~ /^[[:alpha:]]+$/) { $location = $index{length($title) > 16 ? md5 $title : $title} }
+    else {
+	for ( map { $_, ucfirst($_), encode 'utf8', ucfirst decode 'utf8', $_ } $title, encode 'utf8', $title ) {
+	    my $index = length($_) > 16 ? md5 $_ : $_;
+	    next unless exists $index{$index};
+	    ($title, $location) = ($_, $index{$index});
+	    last;
+	}
     }
     die "could not find article '$title'" unless $location;
     my ($seek, $idx) = unpack 'LC', $location;
@@ -164,9 +168,9 @@ sub get_article {
     bunzip2 \($z, my $block);
     die $Bunzip2Error if $Bunzip2Error;
     my $article = (thaw $block)->[$idx];
-    if ($article =~ /^#REDIRECT(?:ION)?\s*\[\[(?<redir>[^\]]*)\]\]$/i) {
-	my $redir = $+{redir};
+    if ($article =~ /^#REDIRECT(?:ION)?\s*\[\[(?<redir>[^\]]*)\]\]/i) {
+	my $redir = encode 'utf8', $+{redir};
 	return "<!-- redirected from '@{[decode 'utf8', $title]}' -->\n" .
-	get_article($redir), encode 'utf8', $redir;
+	get_article($redir), $redir;
     } else { return $article }
 }
